@@ -1,0 +1,9 @@
+version: 2
+models:
+  - name: fct_user_engagement
+    description: One row per user. Posts written and comments received.
+    columns:
+      - name: user_id
+        data_tests: [unique, not_null]
+      - name: posts
+        data_tests: [not_null]
