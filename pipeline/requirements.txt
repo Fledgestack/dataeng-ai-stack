@@ -1,0 +1,11 @@
+# Exact pins. Verified to resolve together on Python 3.12 (Sept 2026).
+# Bump one at a time, deliberately. Never float.
+dlt[ducklake,postgres]==1.30.0
+duckdb==1.5.5
+dbt-core==1.12.5
+dbt-duckdb==1.11.0
+dagster==1.13.24
+dagster-webserver==1.13.24
+dagster-postgres==0.29.24
+dagster-dbt==0.29.24
+dagster-dlt==0.29.24
