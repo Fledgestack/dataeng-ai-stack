@@ -1,0 +1,116 @@
+# =============================================================================
+# 7-repo open-source data stack
+#   dlt (ingest) -> DuckLake on DuckDB (lakehouse) -> dbt-core (transform)
+#   -> Dagster (orchestrate) -> Postgres serving layer -> Evidence + Metabase (BI)
+#
+# Kill-switch-first:
+#   * The daily schedule ships STOPPED. Nothing runs until you turn it on.
+#   * PIPELINE_ENABLED=false in .env makes every run fail fast before touching data.
+#   * `make kill` stops the daemon, which halts schedules AND in-flight runs.
+#   * Every container has a memory cap. Max 1 concurrent run (see dagster.yaml).
+#
+# Supply chain: every image and package is pinned. Bump deliberately, never "latest".
+# =============================================================================
+
+x-pipeline-env: &pipeline-env
+  PIPELINE_ENABLED: ${PIPELINE_ENABLED:-true}
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+  POSTGRES_USER: ${POSTGRES_USER}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  DAGSTER_PG_DB: dagster
+  LAKE_CATALOG_DB: lake_catalog
+  ANALYTICS_DB: analytics
+  LAKE_DATA_PATH: /data/lake/
+  DAGSTER_HOME: /opt/dagster/home
+
+services:
+  postgres:
+    image: postgres:17.6-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "127.0.0.1:5433:5432"   # localhost only; 5433 avoids clashing with a local Postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    deploy:
+      resources:
+        limits: { memory: 1g }
+
+  dagster-webserver:
+    build: ./pipeline
+    image: data-stack-pipeline:local
+    command: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-w", "workspace.yaml"]
+    restart: unless-stopped
+    environment: *pipeline-env
+    volumes:
+      - lake_data:/data
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      postgres: { condition: service_healthy }
+    deploy:
+      resources:
+        limits: { memory: 2g }
+
+  dagster-daemon:
+    build: ./pipeline
+    image: data-stack-pipeline:local
+    command: ["dagster-daemon", "run", "-w", "workspace.yaml"]
+    restart: unless-stopped
+    environment: *pipeline-env
+    volumes:
+      - lake_data:/data
+    depends_on:
+      postgres: { condition: service_healthy }
+    deploy:
+      resources:
+        limits: { memory: 4g }   # runs execute here; DuckDB is the memory hog
+
+  evidence:
+    build: ./evidence
+    environment:
+      EVIDENCE_SOURCE__analytics__host: postgres
+      EVIDENCE_SOURCE__analytics__port: "5432"
+      EVIDENCE_SOURCE__analytics__database: analytics
+      EVIDENCE_SOURCE__analytics__user: ${POSTGRES_USER}
+      EVIDENCE_SOURCE__analytics__password: ${POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:3001:3000"
+    depends_on:
+      postgres: { condition: service_healthy }
+    deploy:
+      resources:
+        limits: { memory: 2g }
+
+  metabase:
+    image: metabase/metabase:v0.63.18
+    restart: unless-stopped
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: metabase
+      MB_DB_PORT: "5432"
+      MB_DB_USER: ${POSTGRES_USER}
+      MB_DB_PASS: ${POSTGRES_PASSWORD}
+      MB_DB_HOST: postgres
+      MB_ANON_TRACKING_ENABLED: "false"
+    ports:
+      - "127.0.0.1:3002:3000"
+    depends_on:
+      postgres: { condition: service_healthy }
+    deploy:
+      resources:
+        limits: { memory: 2g }
+
+volumes:
+  pg_data:
+  lake_data:
