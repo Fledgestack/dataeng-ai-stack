@@ -1,0 +1,16 @@
+# DuckDB runs in-process; DuckLake (Postgres catalog + Parquet on /data/lake) is ATTACHed.
+# metadata_schema MUST match what dlt used (see stack/config.py) or you'll attach an empty lake.
+stack:
+  target: lake
+  outputs:
+    lake:
+      type: duckdb
+      path: ":memory:"
+      threads: 1
+      extensions: [ducklake, postgres]
+      attach:
+        - path: "ducklake:postgres:dbname={{ env_var('LAKE_CATALOG_DB', 'lake_catalog') }} host={{ env_var('POSTGRES_HOST', 'localhost') }} port={{ env_var('POSTGRES_PORT', '5432') }} user={{ env_var('POSTGRES_USER', 'stack') }} password={{ env_var('POSTGRES_PASSWORD', '') }}"
+          alias: lake
+          is_ducklake: true
+          options:
+            metadata_schema: lake
