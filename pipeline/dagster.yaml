@@ -1,0 +1,19 @@
+# Postgres-backed run/event/schedule storage.
+storage:
+  postgres:
+    postgres_db:
+      hostname: { env: POSTGRES_HOST }
+      port: { env: POSTGRES_PORT }
+      username: { env: POSTGRES_USER }
+      password: { env: POSTGRES_PASSWORD }
+      db_name: { env: DAGSTER_PG_DB }
+
+# Kill-switch-first: one run at a time. A runaway can't pile up behind itself.
+run_coordinator:
+  module: dagster._core.run_coordinator
+  class: QueuedRunCoordinator
+  config:
+    max_concurrent_runs: 1
+
+telemetry:
+  enabled: false
