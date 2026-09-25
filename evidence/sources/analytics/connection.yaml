@@ -1,0 +1,8 @@
+# Non-secret defaults. Credentials come from EVIDENCE_SOURCE__analytics__* env vars (see compose).
+name: analytics
+type: postgres
+options:
+  host: postgres
+  port: 5432
+  database: analytics
+  ssl: false
