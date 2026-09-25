@@ -1,0 +1,12 @@
+version: 2
+sources:
+  - name: raw
+    database: lake
+    schema: raw
+    tables:
+      - name: users
+        meta: { dagster: { asset_key: ["raw", "users"] } }
+      - name: posts
+        meta: { dagster: { asset_key: ["raw", "posts"] } }
+      - name: comments
+        meta: { dagster: { asset_key: ["raw", "comments"] } }
